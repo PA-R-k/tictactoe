@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tic Tac Toe — P.A.Rk Test</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--win:#16a34a}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,'Noto Sans KR',sans-serif;background:linear-gradient(180deg,#071022 0%,#07192a 100%);color:#e6eef8}
+    .wrap{max-width:760px;margin:36px auto;padding:24px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    h1{margin:0 0 6px;font-size:20px}
+    p.lead{margin:0 0 20px;color:var(--muted)}
+    .board{display:grid;grid-template-columns:repeat(3,120px);gap:12px;justify-content:center;margin:18px 0}
+    .cell{width:120px;height:120px;border-radius:10px;background:linear-gradient(180deg,#051223,#0b2030);display:flex;align-items:center;justify-content:center;font-size:48px;cursor:pointer;user-select:none;box-shadow:inset 0 -6px 14px rgba(0,0,0,0.45)}
+    .cell.disabled{cursor:not-allowed;opacity:0.7}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    button{background:var(--accent);border:none;padding:10px 14px;border-radius:8px;color:#052026;font-weight:600;cursor:pointer}
+    .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .status{margin-left:auto;color:var(--muted)}
+    .small{font-size:13px;color:var(--muted)}
+    .highlight{background:linear-gradient(90deg,rgba(6,182,212,0.12),rgba(6,182,212,0.06));box-shadow:0 6px 18px rgba(6,182,212,0.06)}
+    .win{outline:3px solid rgba(22,163,74,0.18)}
+    .line{height:6px;background:var(--win);border-radius:6px;margin-top:12px;display:none}
+    .controls .mode{padding:8px 10px;border-radius:8px;background:#0c1720}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media(max-width:520px){.board{grid-template-columns:repeat(3,86px);gap:8px}.cell{width:86px;height:86px;font-size:34px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Tic‑Tac‑Toe (검증용)</h1>
+    <p class="lead">로컬에서 바로 플레이 가능한 HTML 파일입니다. 사람 대 사람, 사람 대 컴퓨터(완전 최적화 AI) 모드 지원.</p>
+
+    <div class="controls">
+      <select id="mode" class="mode" title="게임 모드">
+        <option value="pvp">사람 vs 사람</option>
+        <option value="pvc">사람 vs 컴퓨터 (컴퓨터는 O)</option>
+      </select>
+
+      <label class="small">선 플레이어: 
+        <select id="starter" class="mode">
+          <option value="X">X</option>
+          <option value="O">O</option>
+        </select>
+      </label>
+
+      <button id="reset">새로 시작</button>
+      <button id="undo" class="btn-ghost">한 수 되돌리기</button>
+      <div class="status" id="status">준비</div>
+    </div>
+
+    <div class="board" id="board" aria-label="틱택토 보드">
+      <!-- 9 cells -->
+      <div class="cell" data-i="0"></div>
+      <div class="cell" data-i="1"></div>
+      <div class="cell" data-i="2"></div>
+      <div class="cell" data-i="3"></div>
+      <div class="cell" data-i="4"></div>
+      <div class="cell" data-i="5"></div>
+      <div class="cell" data-i="6"></div>
+      <div class="cell" data-i="7"></div>
+      <div class="cell" data-i="8"></div>
+    </div>
+
+    <div class="line" id="winline"></div>
+
+    <footer>
+      <div class="small">작동 방식: 각 칸을 클릭해 표시합니다. '사람 vs 컴퓨터'에서 컴퓨터는 최적의 전략(minimax)을 사용합니다. 검증해보시고 문제 있으면 알려주세요 — 바로 고칠게요.</div>
+    </footer>
+  </div>
+
+  <script>
+    // Game state
+    const cells = Array.from(document.querySelectorAll('.cell'));
+    const boardEl = document.getElementById('board');
+    const statusEl = document.getElementById('status');
+    const modeEl = document.getElementById('mode');
+    const resetBtn = document.getElementById('reset');
+    const undoBtn = document.getElementById('undo');
+    const starterEl = document.getElementById('starter');
+
+    let board = Array(9).fill(null);
+    let history = [];
+    let currentPlayer = 'X';
+    let running = true;
+
+    const winCombos = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+
+    function render(){
+      cells.forEach((c,i)=>{
+        c.textContent = board[i] || '';
+        c.classList.toggle('disabled', !!board[i] || !running);
+        c.classList.remove('win');
+      });
+    }
+
+    function checkWinner(b){
+      for(const combo of winCombos){
+        const [a,b1,c] = combo;
+        if(b[a] && b[a] === b[b1] && b[a] === b[c]) return {winner: b[a], combo};
+      }
+      if(b.every(Boolean)) return {winner: 'draw'};
+      return null;
+    }
+
+    function markWin(combo){
+      combo.forEach(i=>cells[i].classList.add('win'));
+    }
+
+    function setStatus(text){ statusEl.textContent = text; }
+
+    function makeMove(i){
+      if(!running || board[i]) return false;
+      board[i] = currentPlayer;
+      history.push({board: board.slice(), player: currentPlayer, idx:i});
+      const res = checkWinner(board);
+      if(res){
+        running = false;
+        if(res.winner === 'draw') setStatus('무승부');
+        else { setStatus(res.winner + ' 승리!'); markWin(res.combo); }
+      } else {
+        currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+        setStatus((currentPlayer) + " 차례");
+      }
+      render();
+      return true;
+    }
+
+    // Minimax for optimal play (computer plays 'O')
+    function availableMoves(b){ return b.map((v,i)=>v?null:i).filter(v=>v!==null); }
+
+    function minimax(b, player){
+      const result = checkWinner(b);
+      if(result){
+        if(result.winner === 'X') return {score: -1};
+        if(result.winner === 'O') return {score: 1};
+        if(result.winner === 'draw') return {score: 0};
+      }
+      const moves = [];
+      for(const i of availableMoves(b)){
+        const copy = b.slice(); copy[i] = player;
+        const next = minimax(copy, player === 'O' ? 'X' : 'O');
+        moves.push({idx:i, score: next.score});
+      }
+      let best;
+      if(player === 'O'){
+        best = moves.reduce((a,c)=> c.score > a.score ? c : a, moves[0]);
+      } else {
+        best = moves.reduce((a,c)=> c.score < a.score ? c : a, moves[0]);
+      }
+      return best;
+    }
+
+    // Event handlers
+    cells.forEach(c=>c.addEventListener('click', e=>{
+      const i = Number(e.currentTarget.dataset.i);
+      if(!running) return;
+      if(modeEl.value === 'pvc' && currentPlayer === 'O') return; // block clicking when computer's turn
+      if(makeMove(i)){
+        if(modeEl.value === 'pvc' && running && currentPlayer === 'O'){
+          // allow tiny delay to simulate thinking
+          setTimeout(()=>{
+            const best = minimax(board, 'O');
+            if(best && typeof best.idx === 'number') makeMove(best.idx);
+          }, 160);
+        }
+      }
+    }));
+
+    resetBtn.addEventListener('click', ()=>{
+      board = Array(9).fill(null);
+      history = [];
+      currentPlayer = starterEl.value;
+      running = true;
+      setStatus(currentPlayer + ' 차례 (새 게임)');
+      render();
+      cells.forEach(c=>c.classList.remove('win'));
+    });
+
+    undoBtn.addEventListener('click', ()=>{
+      if(history.length === 0 || !running) return;
+      // undo last move
+      history.pop();
+      const previous = history.length ? history[history.length-1].board.slice() : Array(9).fill(null);
+      board = previous;
+      currentPlayer = history.length ? (history[history.length-1].player === 'X' ? 'O' : 'X') : starterEl.value;
+      running = true;
+      cells.forEach(c=>c.classList.remove('win'));
+      setStatus(currentPlayer + ' 차례 (되돌림)');
+      render();
+    });
+
+    modeEl.addEventListener('change', ()=>{
+      resetBtn.click();
+    });
+
+    starterEl.addEventListener('change', ()=>{ resetBtn.click(); });
+
+    // initialize
+    (function init(){
+      currentPlayer = starterEl.value;
+      setStatus(currentPlayer + ' 차례');
+      render();
+    })();
+
+    // expose for debugging in console if needed
+    window.__ttt = {getState: ()=>({board,history,currentPlayer,running})};
+  </script>
+</body>
+</html>
